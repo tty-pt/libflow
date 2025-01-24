@@ -1,7 +1,7 @@
-#include <mov.h>
+#include <flow.h>
 
-int mov_run() {
+int flow_run() {
 	unsigned number = 3;
-	mov_write(0, &number, sizeof(number));
+	flow_write(0, &number, sizeof(number));
 	return 0;
 }

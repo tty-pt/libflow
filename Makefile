@@ -5,22 +5,22 @@ libdir := /usr/local/lib ${pwd} ${npm-lib:%=${npm-root}/%} \
 	  ${npm-lib:%=${npm-root-dir}/../../%}
 LDFLAGS	+= -lqhash -ldb ${libdir:%=-L%} ${libdir:%=-Wl,-rpath,%}
 
-all: libmov.a number_gen.so number_print.so flow1.so mov
+all: libflow.a number_gen.so number_print.so flow1.so flow
 
 number_gen.so: number_gen.c
-	        ${CC} -shared -g -o $@ -fPIC number_gen.c -lmov -L. -I./include
+	        ${CC} -shared -g -o $@ -fPIC number_gen.c -lflow -L. -I./include
 
 number_print.so: number_print.c
-	        ${CC} -shared -g -o $@ -fPIC number_print.c -lmov -L. -I./include
+	        ${CC} -shared -g -o $@ -fPIC number_print.c -lflow -L. -I./include
 
 flow1.so: flow1.c
-	        ${CC} -shared -g -o $@ -fPIC flow1.c -lmov -L. -I./include
+	        ${CC} -shared -g -o $@ -fPIC flow1.c -lflow -L. -I./include
 
-libmov.o: libmov.c
-	        ${CC} -g -c -o $@ -fPIC ${CFLAGS} libmov.c
+libflow.o: libflow.c
+	        ${CC} -g -c -o $@ -fPIC ${CFLAGS} libflow.c
 
-libmov.a: libmov.o
-	        ar rcs libmov.a libmov.o
+libflow.a: libflow.o
+	        ar rcs libflow.a libflow.o
 
-mov: mov.c
-	        ${CC} -g -o $@ mov.c ${LDFLAGS} -I./include
+flow: flow.c
+	        ${CC} -g -o $@ flow.c ${LDFLAGS} -I./include

@@ -1,9 +1,9 @@
-#include <mov.h>
+#include <flow.h>
 #include <stdio.h>
 
-int mov_run() {
+int flow_run() {
 	unsigned number = 0;
-	mov_read(0, &number, sizeof(number));
+	flow_read(0, &number, sizeof(number));
 	printf("number: %u\n", number);
 	return 0;
 }

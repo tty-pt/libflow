@@ -1,14 +1,14 @@
-#ifndef MOV_PAPI_H
-#define MOV_PAPI_H
+#ifndef FLOW_PAPI_H
+#define FLOW_PAPI_H
 
-#include "./mov.h"
+#include "./flow.h"
 
-struct mov {
-	mov_io_t *write, *read;
-	mov_link_tran_t *link_tran;
-	mov_link_t *link;
-	mov_node_t *node;
-	mov_inst_t *inst, *tran;
+struct flow {
+	flow_io_t *write, *read;
+	flow_link_tran_t *link_tran;
+	flow_link_t *link;
+	flow_node_t *node;
+	flow_inst_t *inst, *tran;
 };
 
 #endif

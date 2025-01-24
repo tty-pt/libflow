@@ -6,7 +6,7 @@ What if each node / flow was a dynamically loaded shared library? And a host pro
 ```sh
 pnpm i
 make
-./mov flow1
+./flow flow1
 ```
 
 ## Structure
