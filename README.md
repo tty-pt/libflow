@@ -6,7 +6,14 @@ What if each node / flow was a dynamically loaded shared library? And a host pro
 ```sh
 pnpm i
 make
-./flow flow1
+./flowd
+```
+
+On another terminal:
+```sh
+telnet localhost 4201
+LOAD flow1
+RUN 0
 ```
 
 ## Structure

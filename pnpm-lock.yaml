@@ -8,15 +8,57 @@ importers:
 
   .:
     dependencies:
+      '@tty-pt/ndc':
+        specifier: ^0.7.17
+        version: 0.7.17(@tty-pt/qhash@0.5.33)(@xterm/addon-fit@0.10.0(@xterm/xterm@5.5.0))(@xterm/addon-web-links@0.11.0(@xterm/xterm@5.5.0))(@xterm/xterm@5.5.0)
       '@tty-pt/qhash':
         specifier: ^0.5.33
         version: 0.5.33
 
 packages:
 
+  '@tty-pt/ndc@0.7.17':
+    resolution: {integrity: sha512-aiq53Z3mV/95DqOGJcKQdHAJw8uechFJViHYRg7Pdmr4F1rCcicZUFYAb3NHlLOix6VhvPGySaomz3QFqKC51A==}
+    hasBin: true
+    peerDependencies:
+      '@tty-pt/qhash': ^0.5.29
+      '@xterm/addon-fit': ^0.10.0
+      '@xterm/addon-web-links': ^0.11.0
+      '@xterm/xterm': ^5.5.0
+
   '@tty-pt/qhash@0.5.33':
     resolution: {integrity: sha512-LF0X63TShjWoemfLIN668EAOhHuWVoLKGjv2iCadY0uirIy7cYAk3bb0ujZRAL6CTHolUkZ+qaO2L6TppE6cVg==}
 
+  '@xterm/addon-fit@0.10.0':
+    resolution: {integrity: sha512-UFYkDm4HUahf2lnEyHvio51TNGiLK66mqP2JoATy7hRZeXaGMRDr00JiSF7m63vR5WKATF605yEggJKsw0JpMQ==}
+    peerDependencies:
+      '@xterm/xterm': ^5.0.0
+
+  '@xterm/addon-web-links@0.11.0':
+    resolution: {integrity: sha512-nIHQ38pQI+a5kXnRaTgwqSHnX7KE6+4SVoceompgHL26unAxdfP6IPqUTSYPQgSwM56hsElfoNrrW5V7BUED/Q==}
+    peerDependencies:
+      '@xterm/xterm': ^5.0.0
+
+  '@xterm/xterm@5.5.0':
+    resolution: {integrity: sha512-hqJHYaQb5OptNunnyAnkHyM8aCjZ1MEIDTQu1iIbbTD/xops91NB5yq1ZK/dC2JDbVWtF23zUtl9JE2NqwT87A==}
+
 snapshots:
 
+  '@tty-pt/ndc@0.7.17(@tty-pt/qhash@0.5.33)(@xterm/addon-fit@0.10.0(@xterm/xterm@5.5.0))(@xterm/addon-web-links@0.11.0(@xterm/xterm@5.5.0))(@xterm/xterm@5.5.0)':
+    dependencies:
+      '@tty-pt/qhash': 0.5.33
+      '@xterm/addon-fit': 0.10.0(@xterm/xterm@5.5.0)
+      '@xterm/addon-web-links': 0.11.0(@xterm/xterm@5.5.0)
+      '@xterm/xterm': 5.5.0
+
   '@tty-pt/qhash@0.5.33': {}
+
+  '@xterm/addon-fit@0.10.0(@xterm/xterm@5.5.0)':
+    dependencies:
+      '@xterm/xterm': 5.5.0
+
+  '@xterm/addon-web-links@0.11.0(@xterm/xterm@5.5.0)':
+    dependencies:
+      '@xterm/xterm': 5.5.0
+
+  '@xterm/xterm@5.5.0': {}

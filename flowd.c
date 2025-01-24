@@ -2,12 +2,29 @@
 #include "./include/papi.h"
 #include <dlfcn.h>
 #include <qhash.h>
+#include <ndc.h>
 #include <stdlib.h>
 
+struct ndc_config ndc_config = { .flags = 0 };
 unsigned class_hd, class_rhd, inst_hd, link_hd, tran_hd, data_hd;
 struct flow flow;
 unsigned me, parent;
 DB_TXN *txnid;
+
+void do_load(int fd, int argc, char *argv[]);
+void do_run(int fd, int argc, char *argv[]);
+
+struct cmd_slot cmds[] = {
+	{
+		.name = "LOAD",
+		.cb = &do_load,
+		.flags = CF_NOAUTH,
+	}, {
+		.name = "RUN",
+		.cb = &do_run,
+		.flags = CF_NOAUTH,
+	},
+};
 
 int flow_write(unsigned oport, void *data, size_t size) {
 	unsigned key[2] = { me, oport };
@@ -95,7 +112,30 @@ void flow_tran_next(unsigned oinst) {
 	}
 }
 
+char *ndc_auth_check(int fd) { return NULL; }
+void ndc_update(unsigned long long dt) {}
+void ndc_command(int fd, int argc, char *argv[]) {}
+void ndc_vim(int fd, int argc, char *argv[]) {}
+int ndc_connect(int fd) {}
+void ndc_disconnect(int fd) {}
+
+void do_load(int fd, int argc, char *argv[]) {
+	unsigned me_class = flow_node(argv[1]);
+	ndc_writef(fd, "%u\n", me_class);
+}
+
+void do_run(int fd, int argc, char *argv[]) {
+	unsigned me_class = strtoull(argv[1], NULL, 10);
+	parent = me = flow_inst(me_class);
+	flow_tran(me);
+}
+
 int main(int argc, char *argv[]) {
+	/* ndc_config.flags = NDC_DETACH; */
+	ndc_config.port = 4201;
+
+	ndc_init(&ndc_config);
+
 	class_hd = lhash_init(sizeof(void *));
 	class_rhd = hash_init();
 	inst_hd = lhash_init(sizeof(unsigned));
@@ -111,9 +151,6 @@ int main(int argc, char *argv[]) {
 	flow.inst = flow_inst;
 	flow.tran = flow_tran;
 
-	unsigned me_class = flow_node(argv[1]);
-	parent = me = flow_inst(me_class);
-
-	flow_tran(me);
+	ndc_main();
 	return 0;
 }
