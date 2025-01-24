@@ -1,4 +1,4 @@
-# libmov
+# libflow
 
 What if each node / flow was a dynamically loaded shared library? And a host program just loaded everything initially and then just ran as it pleased?
 
