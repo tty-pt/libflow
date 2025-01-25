@@ -3,3 +3,5 @@
 /*.a
 /*.o
 /flowd
+/pyflow.c
+/__pycache__

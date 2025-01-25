@@ -70,7 +70,8 @@ unsigned flow_node(char *name) {
 	suhash_put(class_rhd, name, ret);
 
 	struct flow *iflow = dlsym(sl, "flow");
-	*iflow = flow;
+	if (iflow)
+		*iflow = flow;
 
 	flow_run_t *flow_init = dlsym(sl, "flow_init");
 	if (flow_init)
