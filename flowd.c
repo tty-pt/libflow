@@ -4,6 +4,16 @@
 #include <qhash.h>
 #include <ndc.h>
 #include <stdlib.h>
+#include <Python.h>
+
+enum FLOW_FLAG {
+	FF_PYTHON = 1,
+};
+
+struct flow_class {
+	int flags;
+	void *data;
+};
 
 struct ndc_config ndc_config = { .flags = 0 };
 unsigned class_hd, class_rhd, inst_hd, link_hd, tran_hd, data_hd;
@@ -23,7 +33,7 @@ struct cmd_slot cmds[] = {
 		.name = "RUN",
 		.cb = &do_run,
 		.flags = CF_NOAUTH,
-	},
+	}
 };
 
 int flow_write(unsigned oport, void *data, size_t size) {
@@ -51,8 +61,37 @@ int flow_link(unsigned oinst, unsigned oport, unsigned iinst, unsigned iport) {
 	return 0;
 }
 
+void py_run(PyObject *module, char *name) {
+	PyObject *func, *result;
+	func = PyObject_GetAttrString(module, name);
+
+	if (!func || !PyCallable_Check(func)) {
+		PyErr_Print();
+		fprintf(stderr, "Failed to find Python function '%s'\n", name);
+		Py_XDECREF(func);
+		exit(1);
+	}
+
+	result = PyObject_CallObject(func, NULL);
+	Py_DECREF(func);
+
+	if (!result) {
+		PyErr_Print();
+		fprintf(stderr, "Python function '%s' failed\n", name);
+		exit(1);
+	}
+}
+
+void pyflow_dlopen() {
+	void *sl = dlopen("./pyflow.so", RTLD_NOW | RTLD_LOCAL | RTLD_NODELETE);
+	struct flow *iflow = dlsym(sl, "flow");
+	if (iflow)
+		*iflow = flow;
+}
+
 unsigned flow_node(char *name) {
 	static char buf[BUFSIZ];
+	struct flow_class flow_class = { .flags = 0, .data = NULL };
 	unsigned ret;
 
 	sprintf(buf, "./%s.so", name);
@@ -60,20 +99,39 @@ unsigned flow_node(char *name) {
 	if (!shash_get(class_rhd, &ret, name))
 		return ret;
 
-	void *sl = dlopen(buf, RTLD_NOW | RTLD_LOCAL | RTLD_NODELETE);
-	if (!sl) {
-		fprintf(stderr, "dlopen failed: %s\n", dlerror());
-		exit(1);
+	flow_class.data = dlopen(buf, RTLD_NOW | RTLD_LOCAL | RTLD_NODELETE);
+
+	if (!flow_class.data) {
+		PyObject *func, *module_name = PyUnicode_FromString(name);
+		flow_class.flags = FF_PYTHON;
+		flow_class.data = PyImport_Import(module_name);
+		Py_DECREF(module_name);
+
+		if (!flow_class.data) {
+			PyErr_Print();
+			fprintf(stderr, "Failed to load.\n");
+			exit(1);
+		}
+
+		Py_DECREF(flow_class.data);
+
+		ret = lhash_new(class_hd, &flow_class);
+		/* fprintf(stderr, "flow_node %s %u %p %d (py)\n", name, ret, flow_class.data, flow_class.flags); */
+		suhash_put(class_rhd, name, ret);
+
+		py_run(flow_class.data, "flow_init");
+		return ret;
 	}
-	ret = lhash_new(class_hd, &sl);
-	/* fprintf(stderr, "flow_node new %s %p %u\n", buf, sl, ret); */
+
+	ret = lhash_new(class_hd, &flow_class);
+	/* fprintf(stderr, "flow_node %s %u %p %d\n", name, ret, flow_class.data, flow_class.flags); */
 	suhash_put(class_rhd, name, ret);
 
-	struct flow *iflow = dlsym(sl, "flow");
+	struct flow *iflow = dlsym(flow_class.data, "flow");
 	if (iflow)
 		*iflow = flow;
 
-	flow_run_t *flow_init = dlsym(sl, "flow_init");
+	flow_run_t *flow_init = dlsym(flow_class.data, "flow_init");
 	if (flow_init)
 		(*flow_init)();
 
@@ -89,15 +147,20 @@ unsigned flow_inst(unsigned class_id) {
 void flow_tran_next(unsigned oinst);
 
 unsigned flow_tran(unsigned iinst) {
-	void *sl;
+	struct flow_class flow_class;
 	unsigned iclass;
 	/* fprintf(stderr, "flow_tran -> %u\n", iinst); */
 
 	uhash_get(inst_hd, &iclass, iinst);
-	uhash_get(class_hd, &sl, iclass);
-	flow_run_t *flow_run = dlsym(sl, "flow_run");
+	uhash_get(class_hd, &flow_class, iclass);
 	me = iinst;
-	(*flow_run)();
+
+	if (flow_class.flags & FF_PYTHON)
+		py_run(flow_class.data, "flow_run");
+	else {
+		flow_run_t *flow_run = dlsym(flow_class.data, "flow_run");
+		(*flow_run)();
+	}
 
 	flow_tran_next(iinst);
 }
@@ -137,12 +200,13 @@ int main(int argc, char *argv[]) {
 
 	ndc_init(&ndc_config);
 
-	class_hd = lhash_init(sizeof(void *));
+	class_hd = lhash_init(sizeof(struct flow_class));
 	class_rhd = hash_init();
 	inst_hd = lhash_init(sizeof(unsigned));
 	link_hd = hash_init();
 	tran_hd = hash_init();
 	data_hd = hash_init();
+	Py_Initialize();
 
 	flow.read = flow_read;
 	flow.write = flow_write;
@@ -151,6 +215,7 @@ int main(int argc, char *argv[]) {
 	flow.node = flow_node;
 	flow.inst = flow_inst;
 	flow.tran = flow_tran;
+	pyflow_dlopen();
 
 	ndc_main();
 	return 0;

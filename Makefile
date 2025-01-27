@@ -30,4 +30,4 @@ pyflow.so: pyflow.py
 	python3 pyflow.py
 
 flowd: flowd.c
-	        ${CC} -g -o $@ flowd.c ${LDFLAGS} -I./include -I./node_modules/@tty-pt/ndc/include
+	        ${CC} -g -o $@ flowd.c ${LDFLAGS} -I./include -I./node_modules/@tty-pt/ndc/include -I/usr/include/python3.10
