@@ -14,6 +14,23 @@ On another terminal:
 telnet localhost 4201
 LOAD flow1
 RUN 0
+LOAD pyfun
+RUN 1
+```
+
+## Advantages
+- Separation of flow / node initialization and execution. This allows for needed connections to be established only once per node type.
+- Python imports resolved on load
+- Python only initialized once
+- Nodes or flows can be written as shared libraries, which allows for a variety of languages.
+- Should be thread safe by default
+- WS(S) / dynamic HTTP(S) support for updates is built-in by default. WS can notify clients with state updates for node lights to light up, for example.
+
+## Documentation
+You should have language server information about all the functions you need.
+```sh
+make
+man ./docs/man/man3/flow.h.3
 ```
 
 ## Structure

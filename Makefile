@@ -6,7 +6,7 @@ libdir := /usr/lib/x86_64-linux-gnu /usr/local/lib ${pwd} ${npm-lib:%=${npm-root
 
 LDFLAGS	:=  -Wl,--no-as-needed -lpython3.10 -lndc -lqhash -ldb ${libdir:%=-L%} ${libdir:%=-Wl,-rpath,%}
 
-all: libflow.a number_gen.so number_print.so flow1.so pyflow.so flowd
+all: libflow.a number_gen.so number_print.so flow1.so pyflow.so flowd docs/man/man3/flow.h.3
 
 number_gen.so: number_gen.c
 	        ${CC} -shared -g -o $@ -fPIC number_gen.c -lflow -L. -I./include
@@ -31,3 +31,6 @@ pyflow.so: pyflow.py
 
 flowd: flowd.c
 	        ${CC} -g -o $@ flowd.c ${LDFLAGS} -I./include -I./node_modules/@tty-pt/ndc/include -I/usr/include/python3.10
+
+docs/man/man3/flow.h.3: include/flow.h
+	doxygen Doxyfile
