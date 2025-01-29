@@ -18,9 +18,10 @@ struct flow_class {
 };
 
 struct ndc_config ndc_config = { .flags = 0 };
-unsigned class_hd, class_rhd, inst_hd, link_hd, tran_hd, data_hd;
+unsigned class_hd, class_rhd, inst_hd, link_hd,
+	 tran_hd, data_hd, stack_hd;
+unsigned me;
 struct flow flow;
-struct idm_list stack;
 DB_TXN *txnid;
 
 void do_load(int fd, int argc, char *argv[]);
@@ -38,27 +39,39 @@ struct cmd_slot cmds[] = {
 	}
 };
 
-int flow_write(unsigned oport, void *data, size_t size) {
-	unsigned key[MAX_STACK], id, n = 0;
-	struct idm_item *c = idml_iter(&stack);
-	while (c = idml_next(&id, c)) {
-		key[n] = id;
+void stack_debug() {
+	unsigned key[MAX_STACK], n = 0;
+	uhash_get(stack_hd, key, me);
+	fprintf(stderr, "stack_debug %u /", me);
+	while (key[n] != (unsigned) -1) {
+		fprintf(stderr, " %u", key[n]);
 		n++;
 	}
-	/* fprintf(stderr, "flow_write %u %u\n", me, oport); */
+	fprintf(stderr, "\n");
+}
+
+int flow_write(unsigned oport, void *data, size_t size) {
+	unsigned key[MAX_STACK], id, n;
+	key[0] = oport;
+	uhash_get(stack_hd, key + 1, me);
+	n = 1;
+	while (key[n] != (unsigned) -1)
+		n++;
+	/* stack_debug(); */
 	hash_put(data_hd, key, sizeof(id) * n, data, size);
 	return 0;
 }
 
 int flow_read(unsigned iport, void *target, size_t size) {
-	unsigned key[MAX_STACK], id, n;
-	struct idm_item *c = idml_iter(&stack);
-	while (c = idml_next(&id, c)) {
-		key[n] = id;
+	unsigned key[MAX_STACK], id, n = 0;
+	uhash_get(stack_hd, key, me);
+	while (key[n++] != (unsigned) -1);
+	key[0] = iport;
+	n = 1;
+	while (key[n] != (unsigned) -1)
 		n++;
-	}
-	/* fprintf(stderr, "flow_read %u %u\n", parent, iport); */
-	hash_get(data_hd, target, key + 1, sizeof(id) * (n - 1));
+	/* stack_debug(); */
+	hash_get(data_hd, target, key, sizeof(id) * n);
 	return 0;
 }
 
@@ -117,14 +130,14 @@ unsigned flow_node(char *name) {
 		PyObject *func, *module_name = PyUnicode_FromString(name);
 		flow_class.flags = FF_PYTHON;
 		flow_class.data = PyImport_Import(module_name);
-		Py_DECREF(module_name);
 
 		if (!flow_class.data) {
 			PyErr_Print();
 			fprintf(stderr, "Failed to load.\n");
-			exit(1);
+			return -1;
 		}
 
+		Py_DECREF(module_name);
 		Py_DECREF(flow_class.data);
 
 		ret = lhash_new(class_hd, &flow_class);
@@ -136,7 +149,6 @@ unsigned flow_node(char *name) {
 	}
 
 	ret = lhash_new(class_hd, &flow_class);
-	/* fprintf(stderr, "flow_node %s %u %p %d\n", name, ret, flow_class.data, flow_class.flags); */
 	suhash_put(class_rhd, name, ret);
 
 	struct flow *iflow = dlsym(flow_class.data, "flow");
@@ -151,22 +163,20 @@ unsigned flow_node(char *name) {
 }
 
 unsigned flow_inst(unsigned class_id) {
-	unsigned ret = lhash_new(inst_hd, &class_id);
-	/* fprintf(stderr, "flow_inst %u %u\n", class_id, ret); */
-	return ret;
+	struct flow_class flow_class;
+	if (uhash_get(class_hd, &flow_class, class_id))
+		return -1;
+	return lhash_new(inst_hd, &class_id);
 }
 
-void flow_tran_next(unsigned oinst);
-
-unsigned flow_tran(unsigned iinst) {
-	struct flow_class flow_class;
+void *flow_tran_thread(void *arg) {
 	unsigned iclass;
-	/* fprintf(stderr, "flow_tran -> %u\n", iinst); */
+	struct flow_class flow_class;
 
-	uhash_get(inst_hd, &iclass, iinst);
+	uhash_get(inst_hd, &iclass, *((unsigned *) arg));
 	uhash_get(class_hd, &flow_class, iclass);
-	idml_push(&stack, iinst);
 
+	me = *((unsigned *) arg);
 	if (flow_class.flags & FF_PYTHON)
 		py_run(flow_class.data, "flow_run");
 	else {
@@ -174,14 +184,41 @@ unsigned flow_tran(unsigned iinst) {
 		(*flow_run)();
 	}
 
-	flow_tran_next(iinst);
-	idml_pop(&stack);
+	free(arg);
 }
+
+void flow_tran_next(unsigned oinst);
+
+unsigned flow_tran(unsigned iinst) {
+	struct flow_class flow_class;
+	unsigned iclass;
+
+	uhash_get(inst_hd, &iclass, iinst);
+	uhash_get(class_hd, &flow_class, iclass);
+
+	unsigned *arg = malloc(sizeof(unsigned)), key[MAX_STACK], id, n = 1;
+	*arg = iinst;
+
+	if (uhash_get(stack_hd, key + 1, me))
+		key[1] = -1;
+	key[0] = iinst;
+	n = 1;
+	while (key[n] != (unsigned) -1)
+		n++;
+	key[n++] = -1;
+	uhash_put(stack_hd, iinst, key, sizeof(id) * n);
+
+	pthread_t thread;
+	pthread_create(&thread, NULL, flow_tran_thread, arg);
+	pthread_detach(thread);
+
+	flow_tran_next(iinst);
+}
+
 
 void flow_tran_next(unsigned oinst) {
 	struct hash_cursor c = hash_iter(tran_hd, &oinst, sizeof(oinst));
 	unsigned iinst, iclass;
-	/* fprintf(stderr, "flow_tran_next %u\n", oinst); */
 
 	while (hash_next(&oinst, &iinst, &c))
 		flow_tran(iinst);
@@ -196,14 +233,19 @@ void ndc_disconnect(int fd) {}
 
 void do_load(int fd, int argc, char *argv[]) {
 	unsigned me_class = flow_node(argv[1]);
-	ndc_writef(fd, "%u\n", me_class);
+	if (me_class == (unsigned) -1)
+		ndc_writef(fd, "Failed to load class: %s\n", argv[1]);
+	else
+		ndc_writef(fd, "%u\n", me_class);
 }
 
 void do_run(int fd, int argc, char *argv[]) {
 	unsigned me_class = strtoull(argv[1], NULL, 10);
 	unsigned me = flow_inst(me_class);
-	idml_push(&stack, me);
-	flow_tran(me);
+	if (me == (unsigned) -1)
+		ndc_writef(fd, "No such class id: %u\n", me_class);
+	else
+		flow_tran(me);
 }
 
 int main(int argc, char *argv[]) {
@@ -218,7 +260,9 @@ int main(int argc, char *argv[]) {
 	link_hd = hash_init();
 	tran_hd = hash_init();
 	data_hd = hash_init();
+	stack_hd = hash_init();
 	Py_Initialize();
+	PyRun_SimpleString("import sys; sys.path.insert(0, '')");
 
 	flow.read = flow_read;
 	flow.write = flow_write;
