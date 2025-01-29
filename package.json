@@ -11,6 +11,6 @@
   "license": "ISC",
   "dependencies": {
     "@tty-pt/ndc": "^0.7.17",
-    "@tty-pt/qhash": "^0.5.33"
+    "@tty-pt/qhash": "^0.5.34"
   }
 }

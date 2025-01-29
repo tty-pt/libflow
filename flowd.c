@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <Python.h>
 
+#define MAX_STACK 524288
+
 enum FLOW_FLAG {
 	FF_PYTHON = 1,
 };
@@ -18,7 +20,7 @@ struct flow_class {
 struct ndc_config ndc_config = { .flags = 0 };
 unsigned class_hd, class_rhd, inst_hd, link_hd, tran_hd, data_hd;
 struct flow flow;
-unsigned me, parent;
+struct idm_list stack;
 DB_TXN *txnid;
 
 void do_load(int fd, int argc, char *argv[]);
@@ -37,16 +39,26 @@ struct cmd_slot cmds[] = {
 };
 
 int flow_write(unsigned oport, void *data, size_t size) {
-	unsigned key[2] = { me, oport };
+	unsigned key[MAX_STACK], id, n = 0;
+	struct idm_item *c = idml_iter(&stack);
+	while (c = idml_next(&id, c)) {
+		key[n] = id;
+		n++;
+	}
 	/* fprintf(stderr, "flow_write %u %u\n", me, oport); */
-	hash_put(data_hd, key, sizeof(key), data, size);
+	hash_put(data_hd, key, sizeof(id) * n, data, size);
 	return 0;
 }
 
 int flow_read(unsigned iport, void *target, size_t size) {
-	unsigned key[2] = { parent, iport };
+	unsigned key[MAX_STACK], id, n;
+	struct idm_item *c = idml_iter(&stack);
+	while (c = idml_next(&id, c)) {
+		key[n] = id;
+		n++;
+	}
 	/* fprintf(stderr, "flow_read %u %u\n", parent, iport); */
-	hash_get(data_hd, target, key, sizeof(key));
+	hash_get(data_hd, target, key + 1, sizeof(id) * (n - 1));
 	return 0;
 }
 
@@ -153,7 +165,7 @@ unsigned flow_tran(unsigned iinst) {
 
 	uhash_get(inst_hd, &iclass, iinst);
 	uhash_get(class_hd, &flow_class, iclass);
-	me = iinst;
+	idml_push(&stack, iinst);
 
 	if (flow_class.flags & FF_PYTHON)
 		py_run(flow_class.data, "flow_run");
@@ -163,6 +175,7 @@ unsigned flow_tran(unsigned iinst) {
 	}
 
 	flow_tran_next(iinst);
+	idml_pop(&stack);
 }
 
 void flow_tran_next(unsigned oinst) {
@@ -170,10 +183,8 @@ void flow_tran_next(unsigned oinst) {
 	unsigned iinst, iclass;
 	/* fprintf(stderr, "flow_tran_next %u\n", oinst); */
 
-	while (hash_next(&oinst, &iinst, &c)) {
-		parent = oinst;
+	while (hash_next(&oinst, &iinst, &c))
 		flow_tran(iinst);
-	}
 }
 
 char *ndc_auth_check(int fd) { return NULL; }
@@ -190,7 +201,8 @@ void do_load(int fd, int argc, char *argv[]) {
 
 void do_run(int fd, int argc, char *argv[]) {
 	unsigned me_class = strtoull(argv[1], NULL, 10);
-	parent = me = flow_inst(me_class);
+	unsigned me = flow_inst(me_class);
+	idml_push(&stack, me);
 	flow_tran(me);
 }
 
