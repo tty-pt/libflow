@@ -65,7 +65,6 @@ int flow_write(unsigned oport, void *data, size_t size) {
 int flow_read(unsigned iport, void *target, size_t size) {
 	unsigned key[MAX_STACK], id, n = 0;
 	uhash_get(stack_hd, key, me);
-	while (key[n++] != (unsigned) -1);
 	key[0] = iport;
 	n = 1;
 	while (key[n] != (unsigned) -1)
@@ -81,7 +80,9 @@ int flow_link_tran(unsigned oinst, unsigned iinst) {
 }
 
 int flow_link(unsigned oinst, unsigned oport, unsigned iinst, unsigned iport) {
-	unsigned key[2], value[2];
+	unsigned key[2] = { oinst, oport },
+		 value[2] = { iinst, iport };
+
 	hash_put(link_hd, key, sizeof(key), value, sizeof(value));
 	return 0;
 }

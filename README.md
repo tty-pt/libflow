@@ -37,3 +37,9 @@ man ./docs/man/man3/flow.h.3
 As I said, each node and flow / subflow is a dynamically loaded share library. They link a user-api library so that a host program can provide functions for them to call.
 
 Then the host program just runs the initial flow.
+
+## Awknowledgement
+I have the pleasure to announce this project was open-sourced with the permission of mov.ai. That way I'll be free to work on it on my free time to make a visual programming language for my game, since in mov.ai I have FE tasks to attend to.
+
+Thank you very much 🙏.
+I'll do my best with what I've been given.
