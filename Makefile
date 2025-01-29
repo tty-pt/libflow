@@ -6,7 +6,7 @@ libdir := /usr/lib/x86_64-linux-gnu /usr/local/lib ${pwd} ${npm-lib:%=${npm-root
 
 LDFLAGS	:=  -Wl,--no-as-needed -lpython3.10 -lndc -lqhash -ldb ${libdir:%=-L%} ${libdir:%=-Wl,-rpath,%}
 
-all: libflow.a number_gen.so number_print.so flow1.so pyflow.so flowd docs/man/man3/flow.h.3
+all: libflow.a number_gen.so number_print.so numbers_print.so flow1.so flow2.so pyflow.so flowd docs/man/man3/flow.h.3
 
 number_gen.so: number_gen.c
 	        ${CC} -shared -g -o $@ -fPIC number_gen.c -lflow -L. -I./include
@@ -14,8 +14,14 @@ number_gen.so: number_gen.c
 number_print.so: number_print.c
 	        ${CC} -shared -g -o $@ -fPIC number_print.c -lflow -L. -I./include
 
+numbers_print.so: numbers_print.c
+	        ${CC} -shared -g -o $@ -fPIC numbers_print.c -lflow -L. -I./include
+
 flow1.so: flow1.c
 	        ${CC} -shared -g -o $@ -fPIC flow1.c -lflow -L. -I./include
+
+flow2.so: flow2.c
+	        ${CC} -shared -g -o $@ -fPIC flow2.c -lflow -L. -I./include
 
 libflow.o: libflow.c
 	        ${CC} -g -c -o $@ -fPIC ${CFLAGS} libflow.c

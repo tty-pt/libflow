@@ -18,9 +18,10 @@ struct flow_class {
 };
 
 struct ndc_config ndc_config = { .flags = 0 };
-unsigned class_hd, class_rhd, inst_hd, link_hd,
-	 tran_hd, data_hd, stack_hd;
-unsigned me;
+unsigned class_hd, class_rhd, inst_hd, link_hd, link_rhd,
+	 tran_hd, tran_rhd, data_hd;
+__thread unsigned me, has_init = 0;
+__thread unsigned stack[MAX_STACK], stack_n;
 struct flow flow;
 DB_TXN *txnid;
 
@@ -39,43 +40,76 @@ struct cmd_slot cmds[] = {
 	}
 };
 
-void stack_debug() {
-	unsigned key[MAX_STACK], n = 0;
-	uhash_get(stack_hd, key, me);
-	fprintf(stderr, "stack_debug %u /", me);
-	while (key[n] != (unsigned) -1) {
-		fprintf(stderr, " %u", key[n]);
-		n++;
+void stack_debug(unsigned *key, unsigned n) {
+	unsigned i = 0;
+	fprintf(stderr, " [");
+	while (i < n) {
+		fprintf(stderr, " %u", key[i]);
+		i++;
 	}
-	fprintf(stderr, "\n");
+	fprintf(stderr, " ]");
 }
 
 int flow_write(unsigned oport, void *data, size_t size) {
+	unsigned link_key[2] = { me, oport }, link_value[2];
 	unsigned key[MAX_STACK], id, n;
-	key[0] = oport;
-	uhash_get(stack_hd, key + 1, me);
-	n = 1;
-	while (key[n] != (unsigned) -1)
-		n++;
-	/* stack_debug(); */
-	hash_put(data_hd, key, sizeof(id) * n, data, size);
+	struct hash_cursor c;
+
+	memcpy(key + 1, stack, stack_n);
+	fprintf(stderr, "(%u:%u write %u to", me, oport, * (unsigned *) data);
+
+	link_key[0] = me;
+	link_key[1] = oport;
+	c = hash_iter(link_hd, link_key, sizeof(link_key));
+	while (hash_next(link_key, link_value, &c)) {
+		link_key[0] = me;
+		link_key[1] = oport;
+		memcpy(key, stack, sizeof(key));
+		key[0] = link_value[1];
+		key[1] = link_value[0];
+		fprintf(stderr, " %u:%u", key[1], key[0]);
+		stack_debug(stack, stack_n);
+		stack_debug(key, stack_n + 1);
+		hash_put(data_hd, key, sizeof(unsigned) * (stack_n + 1), data, size);
+	}
+	fprintf(stderr, ")\n");
+
 	return 0;
 }
 
 int flow_read(unsigned iport, void *target, size_t size) {
-	unsigned key[MAX_STACK], id, n = 0;
-	uhash_get(stack_hd, key, me);
+	unsigned key[MAX_STACK];
+	memcpy(key + 1, stack, sizeof(unsigned) * stack_n);
 	key[0] = iport;
-	n = 1;
-	while (key[n] != (unsigned) -1)
-		n++;
-	/* stack_debug(); */
-	hash_get(data_hd, target, key, sizeof(id) * n);
+	hash_get(data_hd, target, key, sizeof(unsigned) * (stack_n + 1));
+	fprintf(stderr, "(%u:%u read %u", me, iport, * (unsigned *) target);
+	stack_debug(stack, stack_n);
+	stack_debug(key, stack_n + 1);
+	fprintf(stderr, ")\n");
 	return 0;
 }
 
-int flow_link_tran(unsigned oinst, unsigned iinst) {
+/*
+ * recursive auto-transitions linking
+ */
+void flow_link_tran_rec(unsigned oinst, unsigned iinst) {
+	struct hash_cursor c;
+	unsigned dinst, n = 0, ign;
+
+	c = hash_iter(link_rhd, &iinst, sizeof(iinst));
+
+	while (hash_next(&ign, &dinst, &c)) if (dinst != oinst) {
+		flow_link_tran_rec(dinst, iinst);
+		n++;
+	}
+
 	uhash_put(tran_hd, oinst, &iinst, sizeof(iinst));
+	if (!n)
+		uhash_put(tran_hd, -1, &oinst, sizeof(oinst));
+}
+
+int flow_link_tran(unsigned oinst, unsigned iinst) {
+	flow_link_tran_rec(oinst, iinst);
 	return 0;
 }
 
@@ -83,11 +117,14 @@ int flow_link(unsigned oinst, unsigned oport, unsigned iinst, unsigned iport) {
 	unsigned key[2] = { oinst, oport },
 		 value[2] = { iinst, iport };
 
+	/* fprintf(stderr, "link %u %u -> %u %u\n", oinst, oport, iinst, iport); */
 	hash_put(link_hd, key, sizeof(key), value, sizeof(value));
+	/* fprintf(stderr, "rlink %u -> %u\n", iinst, oinst); */
+	hash_put(link_rhd, &iinst, sizeof(iinst), &oinst, sizeof(oinst));
 	return 0;
 }
 
-void py_run(PyObject *module, char *name) {
+int py_run(PyObject *module, char *name) {
 	PyObject *func, *result;
 	func = PyObject_GetAttrString(module, name);
 
@@ -95,7 +132,7 @@ void py_run(PyObject *module, char *name) {
 		PyErr_Print();
 		fprintf(stderr, "Failed to find Python function '%s'\n", name);
 		Py_XDECREF(func);
-		exit(1);
+		return 1;
 	}
 
 	result = PyObject_CallObject(func, NULL);
@@ -145,7 +182,7 @@ unsigned flow_node(char *name) {
 		/* fprintf(stderr, "flow_node %s %u %p %d (py)\n", name, ret, flow_class.data, flow_class.flags); */
 		suhash_put(class_rhd, name, ret);
 
-		py_run(flow_class.data, "flow_init");
+		has_init = !py_run(flow_class.data, "flow_init");
 		return ret;
 	}
 
@@ -159,6 +196,7 @@ unsigned flow_node(char *name) {
 	flow_run_t *flow_init = dlsym(flow_class.data, "flow_init");
 	if (flow_init)
 		(*flow_init)();
+	has_init = !!flow_init;
 
 	return ret;
 }
@@ -167,7 +205,9 @@ unsigned flow_inst(unsigned class_id) {
 	struct flow_class flow_class;
 	if (uhash_get(class_hd, &flow_class, class_id))
 		return -1;
-	return lhash_new(inst_hd, &class_id);
+	unsigned ret = lhash_new(inst_hd, &class_id);
+	/* fprintf(stderr, "flow_inst %u %u\n", class_id, ret); */
+	return ret;
 }
 
 void *flow_tran_thread(void *arg) {
@@ -176,13 +216,15 @@ void *flow_tran_thread(void *arg) {
 
 	uhash_get(inst_hd, &iclass, *((unsigned *) arg));
 	uhash_get(class_hd, &flow_class, iclass);
-
+	stack[stack_n] = *((unsigned *) arg);
+	stack_n ++; // FIXME should be on node instantiation
 	me = *((unsigned *) arg);
 	if (flow_class.flags & FF_PYTHON)
 		py_run(flow_class.data, "flow_run");
 	else {
 		flow_run_t *flow_run = dlsym(flow_class.data, "flow_run");
-		(*flow_run)();
+		if (flow_run)
+			(*flow_run)();
 	}
 
 	free(arg);
@@ -199,15 +241,6 @@ unsigned flow_tran(unsigned iinst) {
 
 	unsigned *arg = malloc(sizeof(unsigned)), key[MAX_STACK], id, n = 1;
 	*arg = iinst;
-
-	if (uhash_get(stack_hd, key + 1, me))
-		key[1] = -1;
-	key[0] = iinst;
-	n = 1;
-	while (key[n] != (unsigned) -1)
-		n++;
-	key[n++] = -1;
-	uhash_put(stack_hd, iinst, key, sizeof(id) * n);
 
 	pthread_t thread;
 	pthread_create(&thread, NULL, flow_tran_thread, arg);
@@ -245,8 +278,9 @@ void do_run(int fd, int argc, char *argv[]) {
 	unsigned me = flow_inst(me_class);
 	if (me == (unsigned) -1)
 		ndc_writef(fd, "No such class id: %u\n", me_class);
-	else
-		flow_tran(me);
+	else {
+		flow_tran(-1);
+	}
 }
 
 int main(int argc, char *argv[]) {
@@ -260,8 +294,8 @@ int main(int argc, char *argv[]) {
 	inst_hd = lhash_init(sizeof(unsigned));
 	link_hd = hash_init();
 	tran_hd = hash_init();
+	tran_rhd = hash_init();
 	data_hd = hash_init();
-	stack_hd = hash_init();
 	Py_Initialize();
 	PyRun_SimpleString("import sys; sys.path.insert(0, '')");
 
