@@ -18,6 +18,6 @@ int flow_init() {
 
 int flow_run() {
 	// auto-transition?
-	flow_tran(number_gen_0);
+	/* flow_tran(number_gen_0); */
 	return 0;
 }

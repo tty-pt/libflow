@@ -1,14 +1,20 @@
 {
-  "name": "libflow",
-  "version": "1.0.0",
+  "name": "@tty-pt/libflow",
+  "version": "0.0.1",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo @tty-pt/libflow: No tests",
+    "postinstall": "make"
   },
   "keywords": [],
-  "author": "",
+  "author": "quirinpa@gmail.com",
   "license": "ISC",
+  "files": [
+    "*.c",
+    "include",
+    "Makefile"
+  ],
   "dependencies": {
     "@tty-pt/ndc": "^0.7.17",
     "@tty-pt/qhash": "^0.5.34"
